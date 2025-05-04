@@ -143,6 +143,96 @@ impl BstNode {
         }
     }
 
+    pub fn insert(root: &mut Option<BstNodeLink>, key: i32) {
+        let mut y: Option<BstNodeLink> = None;
+        let mut x = root.clone();
+    
+        while let Some(current) = x.clone() {
+            y = Some(current.clone());
+            if key < current.borrow().key.unwrap() {
+                x = current.borrow().left.clone();
+            } else {
+                x = current.borrow().right.clone();
+            }
+        }
+    
+        let new_node = BstNode::new(key);
+        let new_node_link = Rc::new(RefCell::new(new_node));
+    
+        if y.is_none() {
+            *root = Some(new_node_link);
+        } else {
+            let parent = y.unwrap();
+            new_node_link.borrow_mut().parent = Some(Rc::downgrade(&parent));
+            if key < parent.borrow().key.unwrap() {
+                parent.borrow_mut().left = Some(new_node_link);
+            } else {
+                parent.borrow_mut().right = Some(new_node_link);
+            }
+        }
+    }
+    
+    pub fn transplant(root: &mut Option<BstNodeLink>, u: &BstNodeLink, v: Option<BstNodeLink>) {
+        let u_node = u.borrow();
+        let u_parent = u_node.parent.clone();
+    
+        drop(u_node); 
+    
+        if let Some(up) = u_parent.as_ref().and_then(|wp| wp.upgrade()) {
+            if let Some(left_child) = up.borrow().left.as_ref() {
+                if Rc::ptr_eq(u, left_child) {
+                    up.borrow_mut().left = v.clone();
+                } else {
+                    up.borrow_mut().right = v.clone();
+                }
+            } else {
+                up.borrow_mut().right = v.clone(); 
+            }
+        } else {
+            *root = v.clone(); 
+        }
+    
+        if let Some(v_node) = v {
+            v_node.borrow_mut().parent = u_parent;
+        }
+    }
+
+    pub fn delete(root: &mut Option<BstNodeLink>, z: &BstNodeLink) {
+        let z_left = z.borrow().left.clone();
+        let z_right = z.borrow().right.clone();
+        drop(z.borrow()); 
+    
+        if z_left.is_none() {
+            Self::transplant(root, z, z_right);
+        } else if z_right.is_none() {
+            Self::transplant(root, z, z_left);
+        } else {
+            let mut y = z_right.clone();
+            while let Some(y_node) = y.clone().and_then(|n| n.borrow().left.clone()) {
+                y = Some(y_node);
+            }
+    
+            if let Some(y_node) = y.clone() {
+                if let Some(ref z_right_node) = z_right {
+                    if !Rc::ptr_eq(&y_node, z_right_node) {
+                        let y_right = y_node.borrow().right.clone();
+                        Self::transplant(root, &y_node, y_right);
+                        y_node.borrow_mut().right = z_right.clone();
+                        if let Some(r) = &y_node.borrow().right {
+                            r.borrow_mut().parent = Some(Rc::downgrade(&y_node));
+                        }
+                    }
+                }
+    
+                Self::transplant(root, z, y.clone());
+                y_node.borrow_mut().left = z_left.clone();
+                if let Some(l) = &y_node.borrow().left {
+                    l.borrow_mut().parent = Some(Rc::downgrade(&y_node));
+                }
+            }
+        }
+    }
+    
     /**
      * Alternate simpler version of tree_successor that made use of is_nil checking
      */
